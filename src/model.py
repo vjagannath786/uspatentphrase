@@ -6,6 +6,9 @@ import config
 
 
 def loss_fn(outputs, targets):
+
+    #print(outputs)
+    #print(targets)
     
     return torch.sqrt(nn.MSELoss()(outputs, targets))
 
@@ -13,12 +16,13 @@ def loss_fn(outputs, targets):
 class PhraseModel(nn.Module):
     def __init__(self, config, dropout):
         super(PhraseModel, self).__init__()
-        self.deberta = AutoModel.from_pretrained('../../input/debertalarge',  config=config)
+        self.deberta = AutoModel.from_pretrained('microsoft/deberta-v3-small', config=config)
         
         self.drop1 = nn.Dropout(dropout)
-        self.layer_norm = nn.LayerNorm(1024*2)
-        self.l1 = nn.Linear(1024*2,1)
+        self.layer_norm = nn.LayerNorm(768)
+        self.l1 = nn.Linear(768,1)
 
+    '''
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             print('in init')
@@ -33,16 +37,19 @@ class PhraseModel(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    
-    def forward(self,ids, mask, token_type_ids,score=None):
+    '''
+    def forward(self,ids, mask, token_type_ids, score=None):
         _out = self.deberta(ids, mask, token_type_ids)
+
+        #print('I am here')
+        #print(_out)
         x = _out['hidden_states']
-        x = torch.cat((x[-1], x[-2]), dim=-1)
-        #x = x[-1]
+        #x = torch.cat((x[-1], x[-2]), dim=-1)
+        x = x[-1]
         
         #x = self.layer_norm(x)
         
-        x = torch.mean(x,1, True)
+        #x = torch.mean(x,1, True)
         x = self.layer_norm(x)
         x = self.drop1(x)       
         #x = x.permute(0,2,1)

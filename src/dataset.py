@@ -14,8 +14,8 @@ class PhraseDataset:
         return len(self.anchor)
 
     def __getitem__(self, item):
+
         anchor = self.anchor[item]
-        
         target = self.target[item]
         title = self.title[item]
         score = self.score[item]
@@ -26,6 +26,7 @@ class PhraseDataset:
             padding="max_length",
             max_length=self.max_len,
             truncation=True,
+            return_token_type_ids=True,
         )
         input_ids = encoded_text["input_ids"]
         attention_mask = encoded_text["attention_mask"]
