@@ -6,11 +6,11 @@ lr = 2e-5
 batch_size = 32
 seed = 2021
 device = 'cuda'
-epochs = 1
+epochs = 5
 train_file = '../train_folds.csv'
 titles_file = '../titles.csv'
-max_len = 64
-num_workers = 2
+max_len = 200
+num_workers = 1
 
 
 deberata_model = 'microsoft/deberta-v3-small'

@@ -1,3 +1,4 @@
+from scipy import stats
 import numpy as np
 import pandas as pd
 import config
@@ -26,7 +27,22 @@ def _loss_fn(targets, outputs):
     #print((targets))
     return mean_squared_error(targets, outputs, squared=False)
 
+
+def compute_pearson(outputs, labels):
+    # Squash values between 0 to 1
+    outputs[outputs < 0] = 0
+    outputs[outputs > 1] = 1
+    
+    # Round off to nearest 0.25 factor
+    outputs = 0.25 * np.round(outputs/0.25) 
+    
+    pearsonr = stats.pearsonr(outputs, labels)[0]
+    return pearsonr
+
 def run_training(df, i):
+
+    
+    print(df['kfold'].unique())
 
     train_fold = df.loc[df['kfold'] != i].reset_index(drop=True)
     valid_fold = df.loc[df['kfold'] == i].reset_index(drop=True)
@@ -39,7 +55,7 @@ def run_training(df, i):
     trainloader = torch.utils.data.DataLoader(trainset, batch_size = config.batch_size, num_workers = config.num_workers)
     validloader = torch.utils.data.DataLoader(validset, batch_size = config.batch_size, num_workers = config.num_workers)
 
-    model_config = AutoConfig.from_pretrained('microsoft/deberta-v3-small')
+    model_config = AutoConfig.from_pretrained('../../input/debertav3small')
     model_config.output_hidden_states = True
 
     model_config.return_dict = True
@@ -67,7 +83,7 @@ def run_training(df, i):
 
     num_train_steps = int(len(train_fold) / config.batch_size * 15)
 
-    optimizer = AdamW(optimizer_parameters, lr=config.lr)
+    optimizer = torch.optim.AdamW(optimizer_parameters, lr=config.lr)
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=num_train_steps)
 
     early_stopping = EarlyStopping(patience=4, path=f'../../working/checkpoint_deberta_{i}_v1.pt',verbose=True)
@@ -170,5 +186,9 @@ if __name__ == "__main__":
     d = np.concatenate(_targets,axis=0)
     total_loss =  _loss_fn(d,c)
 
+    pearson = compute_pearson(d, c)
+
     print(f'total loss for for all folds is {total_loss}')
+
+    print(f'correlation coef is {pearson}')
 
