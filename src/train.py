@@ -55,7 +55,7 @@ def run_training(df, i):
     trainloader = torch.utils.data.DataLoader(trainset, batch_size = config.batch_size, num_workers = config.num_workers)
     validloader = torch.utils.data.DataLoader(validset, batch_size = config.batch_size, num_workers = config.num_workers)
 
-    model_config = AutoConfig.from_pretrained('../../input/debertav3small')
+    model_config = AutoConfig.from_pretrained(config.model_config)
     model_config.output_hidden_states = True
 
     model_config.return_dict = True

@@ -2,8 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel
+from config import model_config
 import config
-
+from dataset import PhraseDataset
+import pandas as pd
+from transformers import AutoConfig
 
 
 def loss_fn(outputs, targets):
@@ -21,9 +24,14 @@ class PhraseModel(nn.Module):
     def __init__(self, config, dropout):
         super(PhraseModel, self).__init__()
         self.deberta = AutoModel.from_pretrained('../../input/debertav3small', config=config)
+
+        self.deberta1 = AutoModel.from_pretrained('../../input/debertav3small', config=config)
         
         self.drop1 = nn.Dropout(dropout)
-        self.layer_norm = nn.LayerNorm(768)
+        self.layer_norm = nn.LayerNorm(1024)
+
+        self.cosine = nn.CosineSimilarity()
+
         self.l1 = nn.Linear(768,1)
 
         self._init_weights(self.l1)
@@ -63,8 +71,12 @@ class PhraseModel(nn.Module):
                         module.data.fill_(1.0)
 
     
-    def forward(self,ids, mask, token_type_ids, score=None):
+    def forward(self,ids, mask, token_type_ids, ids1, mask1, token_type_ids1,score=None):
         _out = self.deberta(ids, mask, token_type_ids)
+        _out1 = self.deberta1(ids1, mask1, token_type_ids1)
+
+
+
 
         #print('I am here')
         #print(_out)
@@ -79,11 +91,21 @@ class PhraseModel(nn.Module):
         x = self.drop1(x)       
         #x = x.permute(0,2,1)
         #x = self.conv1(x)
-        x = self.l1(x)
+
+        x1 = _out1['hidden_states']
+        x1 = x1[-1]
+        x1 = torch.mean(x1,1, True)
+        x1 = self.drop1(x1)
+
+
+        x3 = self.cosine(x,x1)
+
+
+        x4 = self.l1(x3)
         #print(x.size())
 
 
-        outputs =x.squeeze(1)
+        outputs =x4.squeeze(1)
 
         
         
@@ -97,6 +119,36 @@ class PhraseModel(nn.Module):
             loss = loss_fn(outputs, score.unsqueeze(1))
             
             return outputs, loss
+
+
+
+
+if __name__ == "__main__":
+    df = pd.read_csv(config.train_file)
+
+    df1 = pd.read_csv(config.titles_file)
+
+    final_df = df.merge(df1, left_on='context', right_on='code', how='left')
+
+    final_df = final_df.reset_index(drop=True)
+
+    _dataset = PhraseDataset(anchor= final_df['anchor'].values, target= final_df['target'].values,  
+    title= final_df['title'],score=final_df['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+
+
+    data = _dataset
+
+    trainloader = torch.utils.data.DataLoader(data, batch_size = config.batch_size, num_workers = config.num_workers)
+
+    model_config = AutoConfig.from_pretrained(config.model_config)
+    model_config.output_hidden_states = True
+
+    model_config.return_dict = True
+
+    model  = PhraseModel(config=model_config, dropout=0.1)
+
+    for i in trainloader:
+        output, loss = model(**i)
 
 
 
