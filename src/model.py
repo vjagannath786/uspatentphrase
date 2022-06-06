@@ -23,19 +23,28 @@ def loss_fn(outputs, targets):
 class PhraseModel(nn.Module):
     def __init__(self, config, dropout):
         super(PhraseModel, self).__init__()
-        self.deberta = AutoModel.from_pretrained('../../input/debertav3small', config=config)
+        self.deberta = AutoModel.from_pretrained('microsoft/deberta-v3-large', config=config)
 
-        self.deberta1 = AutoModel.from_pretrained('../../input/debertav3small', config=config)
+        #self.deberta1 = AutoModel.from_pretrained('../../input/debertalarge', config=config)
         
         self.drop1 = nn.Dropout(dropout)
-        self.layer_norm = nn.LayerNorm(1024)
+        #self.layer_norm = nn.LayerNorm(1024)
 
-        self.cosine = nn.CosineSimilarity()
+        #self.cosine = nn.CosineSimilarity(dim=-1)
 
-        self.l1 = nn.Linear(768,1)
+        self.l1 = nn.Linear(1024,1)
 
         self._init_weights(self.l1)
-        self.weights_init_custom()
+
+        self.attention = nn.Sequential(
+            nn.Linear(1024, 512),
+            nn.Tanh(),
+            nn.Linear(512, 1),
+            nn.Softmax(dim=1)
+        )
+
+        self._init_weights(self.attention)
+        #self.weights_init_custom()
 
     
     def _init_weights(self, module):
@@ -70,7 +79,15 @@ class PhraseModel(nn.Module):
                     elif "weight" in name:
                         module.data.fill_(1.0)
 
-    
+    def feature(self, ids, mask, token_type_ids):
+        outputs = self.deberta(ids, mask, token_type_ids)
+        last_hidden_states = outputs[0]
+        # feature = torch.mean(last_hidden_states, 1)
+        weights = self.attention(last_hidden_states)
+        feature = torch.sum(weights * last_hidden_states, dim=1)
+        return feature
+
+    '''
     def forward(self,ids, mask, token_type_ids, ids1, mask1, token_type_ids1,score=None):
         _out = self.deberta(ids, mask, token_type_ids)
         _out1 = self.deberta1(ids1, mask1, token_type_ids1)
@@ -81,31 +98,31 @@ class PhraseModel(nn.Module):
         #print('I am here')
         #print(_out)
         x = _out['hidden_states']
-        #x = torch.cat((x[-1], x[-2]), dim=-1)
-        x = x[-1]
+        x = torch.cat((x[-1], x[-2], x[-3], x[-4]), dim=-1)
+        #x = x[-1]
         
         #x = self.layer_norm(x)
         
         x = torch.mean(x,1, True)
         #x = self.layer_norm(x)
-        x = self.drop1(x)       
+        #x = self.drop1(x)       
         #x = x.permute(0,2,1)
         #x = self.conv1(x)
 
-        x1 = _out1['hidden_states']
-        x1 = x1[-1]
-        x1 = torch.mean(x1,1, True)
-        x1 = self.drop1(x1)
+        #x1 = _out1['hidden_states']
+        #x1 = torch.cat((x1[-1], x1[-2], x1[-3], x1[-4]), dim=-1)
+        #x1 = torch.mean(x1,1, True)
+        #x1 = self.drop1(x1)
 
 
-        x3 = self.cosine(x,x1)
+        #x3 = self.cosine(x,x1)
 
 
-        x4 = self.l1(x3)
+        #print(x3)
+        x4 = self.l1(x)
         #print(x.size())
 
-
-        outputs =x4.squeeze(1)
+        outputs =x4
 
         
         
@@ -119,6 +136,13 @@ class PhraseModel(nn.Module):
             loss = loss_fn(outputs, score.unsqueeze(1))
             
             return outputs, loss
+    '''
+
+    def forward(self,ids, mask, token_type_ids, score=None):
+        feature = self.feature(ids, mask, token_type_ids)
+        output = self.l1(self.drop1(feature))
+        loss = loss_fn(output, score.unsqueeze(1))
+        return output, loss
 
 
 
@@ -143,12 +167,14 @@ if __name__ == "__main__":
     model_config = AutoConfig.from_pretrained(config.model_config)
     model_config.output_hidden_states = True
 
-    model_config.return_dict = True
+    #model_config.return_dict = True
 
     model  = PhraseModel(config=model_config, dropout=0.1)
 
     for i in trainloader:
         output, loss = model(**i)
+        print(loss)
+        break
 
 
 

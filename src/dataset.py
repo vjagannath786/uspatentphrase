@@ -21,13 +21,14 @@ class PhraseDataset:
         score = self.score[item]
 
         encoded_text = self.tokenizer.encode_plus(
-            title +" " + anchor,
+            title +" " + anchor + " " + target,
             padding="max_length",
             max_length=self.max_len,
             truncation=True,
             return_token_type_ids=True,
         )
 
+        '''
         encoded_text1 = self.tokenizer.encode_plus(
             title +" "+target,
             padding="max_length",
@@ -35,24 +36,24 @@ class PhraseDataset:
             truncation=True,
             return_token_type_ids=True,
         )
-
+        '''
 
 
         input_ids = encoded_text["input_ids"]
         attention_mask = encoded_text["attention_mask"]
         token_type_ids = encoded_text["token_type_ids"]
 
-        input_ids1 = encoded_text1["input_ids"]
-        attention_mask1 = encoded_text1["attention_mask"]
-        token_type_ids1 = encoded_text1["token_type_ids"]
+        #input_ids1 = encoded_text1["input_ids"]
+        #attention_mask1 = encoded_text1["attention_mask"]
+        #token_type_ids1 = encoded_text1["token_type_ids"]
 
 
         return {
             "ids": torch.tensor(input_ids, dtype=torch.long),
             "mask": torch.tensor(attention_mask, dtype=torch.long),
             "token_type_ids": torch.tensor(token_type_ids, dtype=torch.long),
-            "ids1": torch.tensor(input_ids1, dtype=torch.long),
-            "mask1": torch.tensor(attention_mask1, dtype=torch.long),
-            "token_type_ids1": torch.tensor(token_type_ids1, dtype=torch.long),
+            #"ids1": torch.tensor(input_ids1, dtype=torch.long),
+            #"mask1": torch.tensor(attention_mask1, dtype=torch.long),
+            #"token_type_ids1": torch.tensor(token_type_ids1, dtype=torch.long),
             "score": torch.tensor(score, dtype=torch.float),
         }
