@@ -1,12 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel
+from transformers import AutoModel, AutoModelForSequenceClassification
 from config import model_config
 import config
 from dataset import PhraseDataset
 import pandas as pd
 from transformers import AutoConfig
+from scipy.spatial.distance import cosine
+import random
+import numpy as np
 
 
 def loss_fn(outputs, targets):
@@ -21,18 +24,20 @@ def loss_fn(outputs, targets):
 
 
 class PhraseModel(nn.Module):
-    def __init__(self, config, dropout):
+    def __init__(self, _config, dropout):
         super(PhraseModel, self).__init__()
-        self.deberta = AutoModel.from_pretrained('microsoft/deberta-v3-large', config=config)
+        self.deberta = AutoModel.from_pretrained('../../input/deberta-v3-large/deberta-v3-large', config=_config)
+        self.deberta1 = AutoModel.from_pretrained('../../input/deberta-v3-large/deberta-v3-large', config=_config)
+        self.deberta2 = AutoModel.from_pretrained('../../input/deberta-v3-large/deberta-v3-large', config=_config)
 
         #self.deberta1 = AutoModel.from_pretrained('../../input/debertalarge', config=config)
         
         self.drop1 = nn.Dropout(dropout)
         #self.layer_norm = nn.LayerNorm(1024)
 
-        #self.cosine = nn.CosineSimilarity(dim=-1)
+        self.cosine = nn.CosineSimilarity(dim=-1)
 
-        self.l1 = nn.Linear(1024,1)
+        self.l1 = nn.Linear(2,1)
 
         self._init_weights(self.l1)
 
@@ -43,7 +48,7 @@ class PhraseModel(nn.Module):
             nn.Softmax(dim=1)
         )
 
-        self._init_weights(self.attention)
+        #self._init_weights(self.attention)
         #self.weights_init_custom()
 
     
@@ -79,6 +84,7 @@ class PhraseModel(nn.Module):
                     elif "weight" in name:
                         module.data.fill_(1.0)
 
+    '''
     def feature(self, ids, mask, token_type_ids):
         outputs = self.deberta(ids, mask, token_type_ids)
         last_hidden_states = outputs[0]
@@ -86,24 +92,47 @@ class PhraseModel(nn.Module):
         weights = self.attention(last_hidden_states)
         feature = torch.sum(weights * last_hidden_states, dim=1)
         return feature
-
     '''
-    def forward(self,ids, mask, token_type_ids, ids1, mask1, token_type_ids1,score=None):
+
+    
+    def forward(self,ids, mask, token_type_ids,ids1, mask1, token_type_ids1,ids2, mask2, token_type_ids2,score=None):
         _out = self.deberta(ids, mask, token_type_ids)
         _out1 = self.deberta1(ids1, mask1, token_type_ids1)
+        _out2 = self.deberta2(ids2, mask2, token_type_ids2)
+
+        #print(_out)
+
+        #hidden_states = _out[1]
+        #pooled_output = torch.cat(tuple([hidden_states[i] for i in [-4, -3, -2, -1]]), dim=-1)
+        #pooled_output = pooled_output[:, 0, :]
 
 
 
-
+        #print(pooled_output)
         #print('I am here')
         #print(_out)
+        #x = pooled_output
+        #x = torch.cat((x[-1], x[-2], x[-3], x[-4]), dim=-1)
         x = _out['hidden_states']
-        x = torch.cat((x[-1], x[-2], x[-3], x[-4]), dim=-1)
-        #x = x[-1]
+        x1 = _out1['hidden_states']
+        x2 = _out2['hidden_states']
+
+        x = x[-1]
+        x1 = x1[-1]
+        x2 = x2[-1]
+
+
+        #x = torch.cat((x[-1]), dim=-1)
+        #x1 = torch.cat((x2[-1]), dim=-1)
+        #2 = torch.cat((x2[-1]), dim=-1)
+
+        x = torch.mean(x,1, True)
+        x1 = torch.mean(x1,1, True)
+        x2 = torch.mean(x2,1, True)
         
         #x = self.layer_norm(x)
         
-        x = torch.mean(x,1, True)
+        #x = torch.mean(x,1, True)
         #x = self.layer_norm(x)
         #x = self.drop1(x)       
         #x = x.permute(0,2,1)
@@ -117,10 +146,19 @@ class PhraseModel(nn.Module):
 
         #x3 = self.cosine(x,x1)
 
+        cosine_sim_0_1 = 1-self.cosine(x, x1)
+        cosine_sim_0_2 = 1-self.cosine(x, x2)
+
+        #print(cosine_sim_0_1)
+        #print(cosine_sim_0_2)
+
+        x3 = torch.cat([cosine_sim_0_1, cosine_sim_0_2], dim=-1)
 
         #print(x3)
-        x4 = self.l1(x)
+        x4 = self.l1(x3)
         #print(x.size())
+
+        #print(x4)
 
         outputs =x4
 
@@ -143,11 +181,21 @@ class PhraseModel(nn.Module):
         output = self.l1(self.drop1(feature))
         loss = loss_fn(output, score.unsqueeze(1))
         return output, loss
+    '''
 
-
+def seed_everything(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
 
 
 if __name__ == "__main__":
+
+    seed_everything(config.seed)
+
     df = pd.read_csv(config.train_file)
 
     df1 = pd.read_csv(config.titles_file)
@@ -156,8 +204,9 @@ if __name__ == "__main__":
 
     final_df = final_df.reset_index(drop=True)
 
-    _dataset = PhraseDataset(anchor= final_df['anchor'].values, target= final_df['target'].values,  
-    title= final_df['title'],score=final_df['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+    final_df['text'] = final_df['context'] + '[SEP]' + final_df['target'] + '[SEP]'  + final_df['anchor']
+
+    _dataset = PhraseDataset(title= final_df['title'].values,anchor= final_df['anchor'].values,target= final_df['target'].values,score=final_df['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
 
 
     data = _dataset
@@ -169,9 +218,10 @@ if __name__ == "__main__":
 
     #model_config.return_dict = True
 
-    model  = PhraseModel(config=model_config, dropout=0.1)
+    model  = PhraseModel(_config=model_config, dropout=0.1)
 
     for i in trainloader:
+        print(i)
         output, loss = model(**i)
         print(loss)
         break

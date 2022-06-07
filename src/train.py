@@ -17,6 +17,14 @@ from sklearn.metrics import mean_squared_error
 
 roberta_pred = None
 
+def seed_everything(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
+
 def _loss_fn(targets, outputs):
     #print(outputs.shape)
     #print(targets.unsqueeze(1).shape)
@@ -49,8 +57,8 @@ def run_training(df, i):
 
 
 
-    trainset = PhraseDataset(anchor= train_fold['anchor'].values, target= train_fold['target'].values,  title= train_fold['title'],score=train_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
-    validset = PhraseDataset(anchor= valid_fold['anchor'].values, target= valid_fold['target'].values,  title= valid_fold['title'],score=valid_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+    trainset = PhraseDataset(title= final_df['title'].values,anchor= final_df['anchor'].values,target= final_df['target'].values,score=train_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+    validset = PhraseDataset(title= final_df['title'].values,anchor= final_df['anchor'].values,target= final_df['target'].values,score=valid_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
 
     trainloader = torch.utils.data.DataLoader(trainset, batch_size = config.batch_size, num_workers = config.num_workers)
     validloader = torch.utils.data.DataLoader(validset, batch_size = config.batch_size, num_workers = config.num_workers)
@@ -60,7 +68,7 @@ def run_training(df, i):
 
     model_config.return_dict = True
 
-    model = PhraseModel(config= model_config, dropout=0.1)
+    model = PhraseModel(_config= model_config, dropout=0.1)
     model.to(config.device)
 
     parameter_optimizer = list(model.named_parameters())
@@ -126,6 +134,8 @@ def run_training(df, i):
 
 
 if __name__ == "__main__":
+
+    seed_everything(config.seed)
     df = pd.read_csv(config.train_file)
 
     df1 = pd.read_csv(config.titles_file)
@@ -137,6 +147,8 @@ if __name__ == "__main__":
     print(final_df.shape)
 
     print(final_df[['anchor','target','context','title', 'score']])
+
+    final_df['text'] = final_df['context'] + '[SEP]' + final_df['target'] + '[SEP]'  + final_df['anchor']
 
     #_dataset = PhraseDataset(anchor= final_df['anchor'].values, target= final_df['target'].values,  title= final_df['title'],score=final_df['score'], tokenizer= config.deberta_tokenizer, max_len= 64)
 
