@@ -14,7 +14,7 @@ def train_fn(model, data_loader, optimizer, scheduler):
         
         
         optimizer.zero_grad()
-        _, loss = model(**data)
+        _, loss, metrics = model(**data)
         
         
         
@@ -23,7 +23,7 @@ def train_fn(model, data_loader, optimizer, scheduler):
 		
         #scheduler.step()
         fin_loss += loss.item()
-    return fin_loss / len(data_loader)
+    return fin_loss / len(data_loader), metrics
 
 
 def eval_fn(model, data_loader):
@@ -37,9 +37,9 @@ def eval_fn(model, data_loader):
             for key, value in data.items():
                 #a
                 data[key] = value.to(config.device)
-            batch_preds, loss = model(**data)
+            batch_preds, loss, metrics = model(**data)
             fin_loss += loss.item()
             fin_preds.append(batch_preds.cpu().detach().numpy())
 
     
-    return fin_preds, fin_loss / len(data_loader)
+    return fin_preds, fin_loss / len(data_loader), metrics

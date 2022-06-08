@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel, AutoModelForSequenceClassification
+from transformers import AutoModel
 from config import model_config
 import config
 from dataset import PhraseDataset
@@ -48,8 +48,8 @@ def monitor_metrics(outputs, targets):
         device = targets.get_device()
         outputs = outputs.cpu().detach().numpy().ravel()
         targets = targets.cpu().detach().numpy().ravel()
-        print(outputs)
-        print(targets)
+        #print(outputs)
+        #print(targets)
         pearsonr = stats.pearsonr(outputs, targets)
         return {"pearsonr": torch.tensor(pearsonr[0], device=config.device)}
 
@@ -57,9 +57,9 @@ def monitor_metrics(outputs, targets):
 class PhraseModel(nn.Module):
     def __init__(self, _config, dropout):
         super(PhraseModel, self).__init__()
-        self.deberta = AutoModel.from_pretrained('princeton-nlp/sup-simcse-bert-base-uncased', config=_config)
-        self.deberta1 = AutoModel.from_pretrained('princeton-nlp/sup-simcse-bert-base-uncased', config=_config)
-        self.deberta2 = AutoModel.from_pretrained('princeton-nlp/sup-simcse-bert-base-uncased', config=_config)
+        self.deberta = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
+        self.deberta1 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
+        self.deberta2 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
 
         #self.deberta1 = AutoModel.from_pretrained('../../input/debertalarge', config=config)
         
@@ -68,7 +68,7 @@ class PhraseModel(nn.Module):
 
         self.cosine = nn.CosineSimilarity(dim=-1)
 
-        self.l1 = nn.Linear(2,1)
+        self.l1 = nn.Linear(1,1)
 
         #self._init_weights(self.l1)
 
@@ -194,8 +194,8 @@ class PhraseModel(nn.Module):
         #x3 = torch.cat([cosine_sim_0_1, cosine_sim_0_2], dim=-1)
 
         #x3 = torch.dist(cosine_sim_0_1, cosine_sim_0_2,2)
-        #x3 = torch.abs(cosine_sim_0_2 - cosine_sim_0_1)
-        x3 = F.pairwise_distance(cosine_sim_0_1, cosine_sim_0_2, keepdim=False)
+        x3 = torch.abs(cosine_sim_0_2 - cosine_sim_0_1)
+        #x3 = F.pairwise_distance(cosine_sim_0_1, cosine_sim_0_2, keepdim=False)
 
         #print(x3)
         #x4 = self.l1(x3)
@@ -203,7 +203,7 @@ class PhraseModel(nn.Module):
 
         #print(x4)
 
-        outputs =x3
+        outputs = x3
 
         
         
@@ -218,10 +218,10 @@ class PhraseModel(nn.Module):
 
             loss =  contrastive_loss(cosine_sim_0_1, cosine_sim_0_2, score.unsqueeze(1))
             metrics = monitor_metrics(outputs, score.unsqueeze(1))
-            print(loss)
-            print(metrics)
+            #print(loss)
+            #print(metrics)
             
-            return outputs, loss
+            return outputs, loss, metrics
     '''
 
     def forward(self,ids, mask, token_type_ids, score=None):
@@ -270,8 +270,9 @@ if __name__ == "__main__":
 
     for i in trainloader:
         #print(i)
-        output, loss = model(**i)
-        #print(loss)
+        output, loss, metrics = model(**i)
+        print(loss)
+        print(metrics)
         break
 
 

@@ -114,11 +114,13 @@ def run_training(df, i):
         
 
         print('Epoch:', epoch,'LR:', scheduler.get_last_lr())
-        train_loss = engine.train_fn(model, trainloader, optimizer, scheduler)
-        valid_preds, valid_loss = engine.eval_fn(model, validloader)
+        train_loss, train_metrics = engine.train_fn(model, trainloader, optimizer, scheduler)
+        valid_preds, valid_loss, valid_metrics = engine.eval_fn(model, validloader)
 
 
         print(f'train_loss {train_loss} and valid_loss {valid_loss}')
+
+        print(f'correlation for train {train_metrics} and valid correlation {valid_metrics}')
         '''
         if valid_loss < best_loss:
             print('valid loss improved saving model')
@@ -190,14 +192,14 @@ if __name__ == "__main__":
         tmp_target = final_df.query(f"kfold == {i}")['score'].values
         tmp = run_training(final_df, i)
 
-        a = np.concatenate(tmp,axis=0)
-        b = np.concatenate(a, axis=0)
+        #a = np.concatenate(tmp,axis=0)
+        #b = np.concatenate(a, axis=0)
 
         #print(len(b))
         #print(len(tmp_target))
 
-        loss =  _loss_fn(tmp_target, b)
-        metrics = monitor_metrics(b, tmp_target)
+        loss =  _loss_fn(tmp_target, tmp)
+        metrics = monitor_metrics(tmp, tmp_target)
 
         print(f'loss for fold {i} is {loss}')
 
@@ -205,7 +207,7 @@ if __name__ == "__main__":
 
         #print(b)
         #print(tmp_target)
-        _outputs.append(b)
+        _outputs.append(tmp)
         _targets.append(tmp_target)
 
     
