@@ -12,6 +12,7 @@ from pytorchtools import EarlyStopping
 import engine
 import random
 from sklearn.metrics import mean_squared_error
+from scipy import stats
 
 
 
@@ -36,6 +37,16 @@ def _loss_fn(targets, outputs):
     return mean_squared_error(targets, outputs, squared=False)
 
 
+def monitor_metrics(outputs, targets):
+        device = targets.get_device()
+        outputs = outputs.cpu().detach().numpy().ravel()
+        targets = targets.cpu().detach().numpy().ravel()
+        #print(outputs)
+        #print(targets)
+        pearsonr = stats.pearsonr(outputs, targets)
+        return {"pearsonr": torch.tensor(pearsonr[0], device=config.device)}
+
+
 def compute_pearson(outputs, labels):
     # Squash values between 0 to 1
     outputs[outputs < 0] = 0
@@ -57,8 +68,8 @@ def run_training(df, i):
 
 
 
-    trainset = PhraseDataset(title= final_df['title'].values,anchor= final_df['anchor'].values,target= final_df['target'].values,score=train_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
-    validset = PhraseDataset(title= final_df['title'].values,anchor= final_df['anchor'].values,target= final_df['target'].values,score=valid_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+    trainset = PhraseDataset(title= train_fold['title'].values,anchor= train_fold['anchor'].values,target= train_fold['target'].values,score=train_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+    validset = PhraseDataset(title= valid_fold['title'].values,anchor= valid_fold['anchor'].values,target= valid_fold['target'].values,score=valid_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
 
     trainloader = torch.utils.data.DataLoader(trainset, batch_size = config.batch_size, num_workers = config.num_workers)
     validloader = torch.utils.data.DataLoader(validset, batch_size = config.batch_size, num_workers = config.num_workers)
@@ -115,6 +126,8 @@ def run_training(df, i):
             best_loss = valid_loss
         '''
         #scheduler.step()
+
+        
 
         early_stopping(valid_loss, model)
         
@@ -184,8 +197,11 @@ if __name__ == "__main__":
         #print(len(tmp_target))
 
         loss =  _loss_fn(tmp_target, b)
+        metrics = monitor_metrics(b, tmp_target)
 
         print(f'loss for fold {i} is {loss}')
+
+        print(f'pearson is {metrics}')
 
         #print(b)
         #print(tmp_target)

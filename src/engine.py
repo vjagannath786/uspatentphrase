@@ -21,7 +21,7 @@ def train_fn(model, data_loader, optimizer, scheduler):
         loss.backward()
         optimizer.step()
 		
-        scheduler.step()
+        #scheduler.step()
         fin_loss += loss.item()
     return fin_loss / len(data_loader)
 
