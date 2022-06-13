@@ -34,7 +34,7 @@ def _loss_fn(targets, outputs):
     #print(loss.view(-1))
     #print((outputs))
     #print((targets))
-    return mean_squared_error(targets, outputs, squared=False)
+    return mean_squared_error(targets, outputs, squared=True)
 
 
 def monitor_metrics(outputs, targets):
@@ -78,6 +78,7 @@ def run_training(df, i):
     model_config.output_hidden_states = True
 
     model_config.return_dict = True
+    model_config.attention_probs_dropout_prob = 0
 
     model = PhraseModel(_config= model_config, dropout=0.1)
     model.to(config.device)
@@ -207,7 +208,7 @@ if __name__ == "__main__":
 
         #print(b)
         #print(tmp_target)
-        _outputs.append(tmp)
+        _outputs.append(b)
         _targets.append(tmp_target)
 
     

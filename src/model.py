@@ -198,6 +198,7 @@ class PhraseModel(nn.Module):
         #x3 = F.pairwise_distance(cosine_sim_0_1, cosine_sim_0_2, keepdim=False)
 
         #print(x3)
+        x = self.drop1(x)
         x4 = self.l1(x)
         #print(x.size())
 
@@ -264,10 +265,11 @@ if __name__ == "__main__":
 
     model_config = AutoConfig.from_pretrained(config.model_config)
     model_config.output_hidden_states = True
+    model_config.attention_probs_dropout_prob = 0
 
     #model_config.return_dict = True
 
-    model  = PhraseModel(_config=model_config, dropout=0.1)
+    model  = PhraseModel(_config=model_config, dropout=0.2)
 
     for i in trainloader:
         #print(i)
