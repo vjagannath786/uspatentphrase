@@ -38,9 +38,9 @@ def _loss_fn(targets, outputs):
 
 
 def monitor_metrics(outputs, targets):
-        device = targets.get_device()
-        outputs = outputs.cpu().detach().numpy().ravel()
-        targets = targets.cpu().detach().numpy().ravel()
+        #device = targets.get_device()
+        #outputs = outputs.cpu().detach().numpy().ravel()
+        #targets = targets.cpu().detach().numpy().ravel()
         #print(outputs)
         #print(targets)
         pearsonr = stats.pearsonr(outputs, targets)
@@ -192,14 +192,14 @@ if __name__ == "__main__":
         tmp_target = final_df.query(f"kfold == {i}")['score'].values
         tmp = run_training(final_df, i)
 
-        #a = np.concatenate(tmp,axis=0)
-        #b = np.concatenate(a, axis=0)
+        a = np.concatenate(tmp,axis=0)
+        b = np.concatenate(a, axis=0)
 
         #print(len(b))
         #print(len(tmp_target))
 
-        loss =  _loss_fn(tmp_target, tmp)
-        metrics = monitor_metrics(tmp, tmp_target)
+        loss =  _loss_fn(tmp_target, b)
+        metrics = monitor_metrics(b, tmp_target)
 
         print(f'loss for fold {i} is {loss}')
 

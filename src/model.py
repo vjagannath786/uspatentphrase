@@ -18,7 +18,7 @@ def loss_fn(outputs, targets):
     #print(outputs)
     #print(targets)
     
-    return torch.sqrt(nn.MSELoss()(outputs, targets))
+    return nn.MSELoss()(outputs, targets)
 
 
 def contrastive_loss(output1, output2, label, margin=1.0):
@@ -57,9 +57,9 @@ def monitor_metrics(outputs, targets):
 class PhraseModel(nn.Module):
     def __init__(self, _config, dropout):
         super(PhraseModel, self).__init__()
-        self.deberta = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
-        self.deberta1 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
-        self.deberta2 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
+        self.deberta = AutoModel.from_pretrained('sentence-transformers/bert-base-nli-mean-tokens', config=_config)
+        #self.deberta1 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
+        #self.deberta2 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
 
         #self.deberta1 = AutoModel.from_pretrained('../../input/debertalarge', config=config)
         
@@ -68,9 +68,9 @@ class PhraseModel(nn.Module):
 
         self.cosine = nn.CosineSimilarity(dim=-1)
 
-        self.l1 = nn.Linear(1,1)
+        self.l1 = nn.Linear(768,1)
 
-        #self._init_weights(self.l1)
+        self._init_weights(self.l1)
 
         self.attention = AttentionHead()
 
@@ -81,7 +81,7 @@ class PhraseModel(nn.Module):
         #    nn.Softmax(dim=1)
         #)
 
-        #self._init_weights(self.attention)
+        self._init_weights(self.attention)
         #self.weights_init_custom()
 
     
@@ -128,10 +128,10 @@ class PhraseModel(nn.Module):
     '''
 
     
-    def forward(self,ids, mask, token_type_ids,ids1, mask1, token_type_ids1,ids2, mask2, token_type_ids2,score=None):
+    def forward(self,ids, mask, token_type_ids,score=None):
         _out = self.deberta(ids, mask, token_type_ids)
-        _out1 = self.deberta1(ids1, mask1, token_type_ids1)
-        _out2 = self.deberta2(ids2, mask2, token_type_ids2)
+        #_out1 = self.deberta1(ids1, mask1, token_type_ids1)
+        #_out2 = self.deberta2(ids2, mask2, token_type_ids2)
 
         #print(_out)
 
@@ -147,18 +147,18 @@ class PhraseModel(nn.Module):
         #x = pooled_output
         #x = torch.cat((x[-1], x[-2], x[-3], x[-4]), dim=-1)
         x = _out['hidden_states']
-        x1 = _out1['hidden_states']
-        x2 = _out2['hidden_states']
+        #x1 = _out1['hidden_states']
+        #x2 = _out2['hidden_states']
 
         
 
         x = x[-1]
-        x1 = x1[-1]
-        x2 = x2[-1]
+        #x1 = x1[-1]
+        #x2 = x2[-1]
 
         x = self.attention(x)
-        x1 = self.attention(x1)
-        x2 = self.attention(x2)
+        #x1 = self.attention(x1)
+        #x2 = self.attention(x2)
 
 
         #x = torch.cat((x[-1]), dim=-1)
@@ -185,8 +185,8 @@ class PhraseModel(nn.Module):
 
         #x3 = self.cosine(x,x1)
 
-        cosine_sim_0_1 = 1-self.cosine(x, x1)
-        cosine_sim_0_2 = 1-self.cosine(x, x2)
+        #cosine_sim_0_1 = 1-self.cosine(x, x1)
+        #cosine_sim_0_2 = 1-self.cosine(x, x2)
 
         #print(cosine_sim_0_1)
         #print(cosine_sim_0_2)
@@ -194,16 +194,16 @@ class PhraseModel(nn.Module):
         #x3 = torch.cat([cosine_sim_0_1, cosine_sim_0_2], dim=-1)
 
         #x3 = torch.dist(cosine_sim_0_1, cosine_sim_0_2,2)
-        x3 = torch.abs(cosine_sim_0_2 - cosine_sim_0_1)
+        #x3 = torch.abs(cosine_sim_0_2 - cosine_sim_0_1)
         #x3 = F.pairwise_distance(cosine_sim_0_1, cosine_sim_0_2, keepdim=False)
 
         #print(x3)
-        #x4 = self.l1(x3)
+        x4 = self.l1(x)
         #print(x.size())
 
         #print(x4)
 
-        outputs = x3
+        outputs = x4
 
         
         
@@ -214,9 +214,10 @@ class PhraseModel(nn.Module):
             return outputs
         else:
             
-            #loss = loss_fn(outputs, score.unsqueeze(1))
+            loss = loss_fn(outputs, score.unsqueeze(1))
 
-            loss =  contrastive_loss(cosine_sim_0_1, cosine_sim_0_2, score.unsqueeze(1))
+            #loss =  contrastive_loss(cosine_sim_0_1, cosine_sim_0_2, score.unsqueeze(1))
+            
             metrics = monitor_metrics(outputs, score.unsqueeze(1))
             #print(loss)
             #print(metrics)
