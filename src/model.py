@@ -13,6 +13,7 @@ import numpy as np
 from scipy import stats
 
 
+
 def loss_fn(outputs, targets):
 
     #print(outputs)
@@ -247,6 +248,8 @@ if __name__ == "__main__":
     seed_everything(config.seed)
 
     df = pd.read_csv(config.train_file)
+
+    
 
     df1 = pd.read_csv(config.titles_file)
 
