@@ -58,7 +58,7 @@ def monitor_metrics(outputs, targets):
 class PhraseModel(nn.Module):
     def __init__(self, _config, dropout):
         super(PhraseModel, self).__init__()
-        self.deberta = AutoModel.from_pretrained('sentence-transformers/bert-base-nli-mean-tokens', config=_config)
+        self.deberta = AutoModel.from_pretrained(config.model_config, config=_config)
         #self.deberta1 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
         #self.deberta2 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
 
@@ -259,7 +259,9 @@ if __name__ == "__main__":
 
     final_df['text'] = final_df['context'] + '[SEP]' + final_df['target'] + '[SEP]'  + final_df['anchor']
 
-    _dataset = PhraseDataset(title= final_df['title'].values,anchor= final_df['anchor'].values,target= final_df['target'].values,score=final_df['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+    _dataset = PhraseDataset(title= final_df['title'].values,anchor= final_df['anchor'].values,target= final_df['target'].values,
+                            section=final_df['section'].values,
+                            score=final_df['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
 
 
     data = _dataset

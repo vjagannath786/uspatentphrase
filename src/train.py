@@ -68,8 +68,10 @@ def run_training(df, i):
 
 
 
-    trainset = PhraseDataset(title= train_fold['title'].values,anchor= train_fold['anchor'].values,target= train_fold['target'].values,score=train_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
-    validset = PhraseDataset(title= valid_fold['title'].values,anchor= valid_fold['anchor'].values,target= valid_fold['target'].values,score=valid_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+    trainset = PhraseDataset(title= train_fold['title'].values,anchor= train_fold['anchor'].values,target= train_fold['target'].values,
+    section=train_fold['section'].values,score=train_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+    validset = PhraseDataset(title= valid_fold['title'].values,anchor= valid_fold['anchor'].values,target= valid_fold['target'].values,
+    section=valid_fold['section'].values,score=valid_fold['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
 
     trainloader = torch.utils.data.DataLoader(trainset, batch_size = config.batch_size, num_workers = config.num_workers)
     validloader = torch.utils.data.DataLoader(validset, batch_size = config.batch_size, num_workers = config.num_workers)

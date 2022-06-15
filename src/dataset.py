@@ -1,10 +1,11 @@
 import torch
 
 class PhraseDataset:
-    def __init__(self, anchor,title,target, score, tokenizer, max_len):
+    def __init__(self, anchor,title,target, section,score, tokenizer, max_len):
         self.anchor = anchor
         self.target = target
         self.title = title
+        self.section = section
         self.score = score
         self.tokenizer = tokenizer
         self.max_len = max_len
@@ -17,10 +18,11 @@ class PhraseDataset:
         target = self.target[item]
         anchor = self.anchor[item]
         title = self.title[item]
+        section = str(self.section[item]).lower()
         score = self.score[item]
 
         encoded_text = self.tokenizer.encode_plus(
-            title + "[SEP]" + anchor + "[SEP]" + target,
+            str(title).lower() + f"[{section}]" + str(anchor).lower() + f"[{section}]" + str(target).lower(),
             padding="max_length",
             max_length=self.max_len,
             truncation=True,
