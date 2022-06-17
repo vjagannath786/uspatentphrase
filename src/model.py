@@ -1,7 +1,9 @@
+import more_itertools
+import multiprocessing
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel
+from transformers import AutoModel, AutoModelForSequenceClassification
 from config import model_config
 import config
 from dataset import PhraseDataset
@@ -11,6 +13,7 @@ from scipy.spatial.distance import cosine
 import random
 import numpy as np
 from scipy import stats
+from torch.utils.data import Sampler, Dataset, DataLoader
 
 
 
@@ -28,8 +31,130 @@ def contrastive_loss(output1, output2, label, margin=1.0):
                                   (label) * torch.pow(F.relu(margin - euclidean_distance), 2))
     return loss_contrastive
 
+
+
+
+class SmartBatchingDataset(Dataset):
+    def __init__(self, df, tokenizer):
+        super(SmartBatchingDataset, self).__init__()
+        self._data = (
+            df.title + f"[{df.section}]" + df.anchor + f"[{df.section}]" + df.target
+        ).apply(tokenizer.tokenize).apply(tokenizer.convert_tokens_to_ids).to_list()
+        self._targets = None
+        if 'score' in df.columns:
+            self._targets = df.score.tolist()
+        self.sampler = None
+
+    def __len__(self):
+        return len(self._data)
+
+    def __getitem__(self, item):
+        if self._targets is not None:
+            return self._data[item], self._targets[item]
+        else:
+            return self._data[item]
+
+    def get_dataloader(self, batch_size, max_len, pad_id):
+        self.sampler = SmartBatchingSampler(
+            data_source=self._data,
+            batch_size=batch_size
+        )
+        collate_fn = SmartBatchingCollate(
+            targets=self._targets,
+            max_length=max_len,
+            pad_token_id=pad_id
+        )
+        dataloader = DataLoader(
+            dataset=self,
+            batch_size=batch_size,
+            sampler=self.sampler,
+            collate_fn=collate_fn,
+            num_workers=(multiprocessing.cpu_count()-1),
+            pin_memory=True
+        )
+        return dataloader
+
+class SmartBatchingSampler(Sampler):
+    def __init__(self, data_source, batch_size):
+        super(SmartBatchingSampler, self).__init__(data_source)
+        self.len = len(data_source)
+        sample_lengths = [len(seq) for seq in data_source]
+        argsort_inds = np.argsort(sample_lengths)
+        self.batches = list(more_itertools.chunked(argsort_inds, n=batch_size))
+        self._backsort_inds = None
+    
+    def __iter__(self):
+        if self.batches:
+            last_batch = self.batches.pop(-1)
+            np.random.shuffle(self.batches)
+            self.batches.append(last_batch)
+        self._inds = list(more_itertools.flatten(self.batches))
+        yield from self._inds
+
+    def __len__(self):
+        return self.len
+    
+    @property
+    def backsort_inds(self):
+        if self._backsort_inds is None:
+            self._backsort_inds = np.argsort(self._inds)
+        return self._backsort_inds
+
+
+class SmartBatchingCollate:
+    def __init__(self, targets, max_length, pad_token_id):
+        self._targets = targets
+        self._max_length = max_length
+        self._pad_token_id = pad_token_id
+        
+    def __call__(self, batch):
+        if self._targets is not None:
+            sequences, targets = list(zip(*batch))
+        else:
+            sequences = list(batch)
+        
+        input_ids, attention_mask = self.pad_sequence(
+            sequences,
+            max_sequence_length=self._max_length,
+            pad_token_id=self._pad_token_id
+        )
+        
+        if self._targets is not None:
+            output = input_ids, attention_mask, torch.tensor(targets)
+        else:
+            output = input_ids, attention_mask
+        return output
+    
+    def pad_sequence(self, sequence_batch, max_sequence_length, pad_token_id):
+        max_batch_len = max(len(sequence) for sequence in sequence_batch)
+        max_len = min(max_batch_len, max_sequence_length)
+        padded_sequences, attention_masks = [[] for i in range(2)]
+        attend, no_attend = 1, 0
+        for sequence in sequence_batch:
+            # As discussed above, truncate if exceeds max_len
+            new_sequence = list(sequence[:max_len])
+            
+            attention_mask = [attend] * len(new_sequence)
+            pad_length = max_len - len(new_sequence)
+            
+            new_sequence.extend([pad_token_id] * pad_length)
+            attention_mask.extend([no_attend] * pad_length)
+            
+            padded_sequences.append(new_sequence)
+            attention_masks.append(attention_mask)
+        
+        padded_sequences = torch.tensor(padded_sequences)
+        attention_masks = torch.tensor(attention_masks)
+        return padded_sequences, attention_masks
+
+
+
+
+
+
+
 class AttentionHead(nn.Module):
-    def __init__(self, in_size: int = 768, hidden_size: int = 512) -> None:
+    def __init__(self, in_size: int = 1024, hidden_size: int = 512) -> None:
         super().__init__()
         self.W = nn.Linear(in_size, hidden_size)
         self.V = nn.Linear(hidden_size, 1)
@@ -58,7 +183,7 @@ def monitor_metrics(outputs, targets):
 class PhraseModel(nn.Module):
     def __init__(self, _config, dropout):
         super(PhraseModel, self).__init__()
-        self.deberta = AutoModel.from_pretrained(config.model_config, config=_config)
+        self.deberta = AutoModelForSequenceClassification.from_pretrained(config.model_config, config=_config)
         #self.deberta1 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
         #self.deberta2 = AutoModel.from_pretrained('princeton-nlp/unsup-simcse-bert-base-uncased', config=_config)
 
@@ -69,7 +194,7 @@ class PhraseModel(nn.Module):
 
         self.cosine = nn.CosineSimilarity(dim=-1)
 
-        self.l1 = nn.Linear(768,1)
+        self.l1 = nn.Linear(1024,1)
 
         self._init_weights(self.l1)
 
@@ -129,8 +254,8 @@ class PhraseModel(nn.Module):
     '''
 
     
-    def forward(self,ids, mask, token_type_ids,score=None):
-        _out = self.deberta(ids, mask, token_type_ids)
+    def forward(self,ids, mask, targets=None):
+        _out = self.deberta(ids, mask)
         #_out1 = self.deberta1(ids1, mask1, token_type_ids1)
         #_out2 = self.deberta2(ids2, mask2, token_type_ids2)
 
@@ -211,16 +336,16 @@ class PhraseModel(nn.Module):
         
 
 
-        if score is None:
+        if targets is None:
             
             return outputs
         else:
             
-            loss = loss_fn(outputs, score.unsqueeze(1))
+            loss = loss_fn(outputs, targets.unsqueeze(1))
 
             #loss =  contrastive_loss(cosine_sim_0_1, cosine_sim_0_2, score.unsqueeze(1))
             
-            metrics = monitor_metrics(outputs, score.unsqueeze(1))
+            metrics = monitor_metrics(outputs, targets.unsqueeze(1))
             #print(loss)
             #print(metrics)
             
@@ -259,14 +384,18 @@ if __name__ == "__main__":
 
     final_df['text'] = final_df['context'] + '[SEP]' + final_df['target'] + '[SEP]'  + final_df['anchor']
 
-    _dataset = PhraseDataset(title= final_df['title'].values,anchor= final_df['anchor'].values,target= final_df['target'].values,
-                            section=final_df['section'].values,
-                            score=final_df['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
+    #_dataset = PhraseDataset(title= final_df['title'].values,anchor= final_df['anchor'].values,target= final_df['target'].values,
+    #                        section=final_df['section'].values,
+    #                        score=final_df['score'], tokenizer= config.deberta_tokenizer, max_len= config.max_len)
 
 
-    data = _dataset
+    #data = _dataset
+    #collate = Collate(tokenizer=config.deberta_tokenizer)
 
-    trainloader = torch.utils.data.DataLoader(data, batch_size = config.batch_size, num_workers = config.num_workers)
+    #trainloader = torch.utils.data.DataLoader(data, batch_size = config.batch_size, num_workers = config.num_workers, collate_fn=collate)
+
+    dataset = SmartBatchingDataset(final_df, config.deberta_tokenizer)
+    dataloader = dataset.get_dataloader(batch_size=32, max_len=150, pad_id=config.deberta_tokenizer.pad_token_id)
 
     model_config = AutoConfig.from_pretrained(config.model_config)
     model_config.output_hidden_states = True
@@ -276,9 +405,9 @@ if __name__ == "__main__":
 
     model  = PhraseModel(_config=model_config, dropout=0.2)
 
-    for i in trainloader:
-        #print(i)
-        output, loss, metrics = model(**i)
+    for i, (input_ids, attention_mask, targets) in enumerate(dataloader):
+        print(i)
+        output, loss, metrics = model(input_ids, attention_mask, targets)
         print(loss)
         print(metrics)
         break

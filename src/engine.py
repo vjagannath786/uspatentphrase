@@ -9,17 +9,19 @@ def train_fn(model, data_loader, optimizer, scheduler):
     accum_iter = 1
     tk0 = tqdm(data_loader, total=len(data_loader))
     
-    for data in tk0:
+    for i, (input_ids, attention_mask, targets) in enumerate(tk0):
 
-        for key, value in data.items():
-            data[key] = value.to(config.device)
+        #for key, value in data.items():
+        #    data[key] = value.to(config.device)
+        
+        input_ids = input_ids.to(config.device)
+        attention_mask = attention_mask.to(config.device)
+        targets = targets.to(config.device)
+        
+        _, loss, metrics = model(input_ids, attention_mask, targets)
         
         
         
-        _, loss, metrics = model(**data)
-        
-        
-        optimizer.zero_grad()
         loss.backward()
 
         # weights update
@@ -30,7 +32,7 @@ def train_fn(model, data_loader, optimizer, scheduler):
             
         optimizer.step()
         scheduler.step()
-        #model.zero_grad()
+        optimizer.zero_grad()
             
         
         
@@ -46,12 +48,18 @@ def eval_fn(model, data_loader):
     fin_preds = []
     tk0 = tqdm(data_loader, total=len(data_loader))
     with torch.no_grad():
-        for data in tk0:
+        for i, (input_ids, attention_mask, targets) in enumerate(tk0):
             #a
-            for key, value in data.items():
+            #for key, value in data.items():
                 #a
-                data[key] = value.to(config.device)
-            batch_preds, loss, metrics = model(**data)
+            #    data[key] = value.to(config.device)
+
+            input_ids = input_ids.to(config.device)
+            attention_mask = attention_mask.to(config.device)
+            targets = targets.to(config.device)
+            
+
+            batch_preds, loss, metrics = model(input_ids, attention_mask,targets)
             fin_loss += loss.item()
             fin_preds.append(batch_preds.cpu().detach().numpy())
 
